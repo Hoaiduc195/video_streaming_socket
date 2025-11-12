@@ -144,6 +144,18 @@ class Client:
 		"""Send RTSP request to the server."""	
 		#-------------
 		# TO COMPLETE
+		self.rtspSeq += 1
+
+		<Method> <VideoFileName> RTSP/1.0
+		CSeq: <SeqNumber>
+		Session: <SessionID> 
+		client_port: <RTPPort>
+
+		self.rtspSocket.send(request.encode())
+		self.requestSent = requestCode
+		print('\nData sent:\n' + request)
+		
+		
 		#-------------
 		
 		# Setup request
