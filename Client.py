@@ -14,10 +14,15 @@ class Client:
 	PLAYING = 2
 	state = INIT
 	
-	SETUP = 0
-	PLAY = 1
-	PAUSE = 2
-	TEARDOWN = 3
+	# SETUP = 0
+	# PLAY = 1
+	# PAUSE = 2
+	# TEARDOWN = 3
+ 
+	SETUP = 'SETUP'
+	PLAY = 'PLAY'
+	PAUSE = 'PAUSE'
+	TEARDOWN = 'TEARDOWN'
 	
 	# Initiation..
 	def __init__(self, master, serveraddr, serverport, rtpport, filename):
@@ -156,7 +161,6 @@ class Client:
 			# Write the RTSP request to be sent.
 			# request = ...
 			request = f"SETUP {self.fileName} RTSP/1.0\nCSeq: {self.rtspSeq}\nTransport: RTP/UDP; client_port= {self.rtpPort}"
-			self.requestSent = requestCode
 		
 		# Play request
 		elif requestCode == self.PLAY and self.state == self.READY:

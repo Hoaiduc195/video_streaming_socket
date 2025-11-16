@@ -93,7 +93,7 @@ class ServerWorker:
 				self.state = self.READY
 				
 				self.clientInfo['event'].set()
-				
+
 				self.replyRtsp(self.OK_200, seq[1])
 		
 		# Process TEARDOWN request
@@ -103,7 +103,7 @@ class ServerWorker:
 			self.clientInfo['event'].set()
 			
 			self.replyRtsp(self.OK_200, seq[1])
-			
+
 			# Close the RTP socket
 			self.clientInfo['rtpSocket'].close()
 			
