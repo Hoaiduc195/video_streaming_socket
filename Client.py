@@ -161,7 +161,8 @@ class Client:
 			# Write the RTSP request to be sent.
 			# request = ...
 			request = f"SETUP {self.fileName} RTSP/1.0\nCSeq: {self.rtspSeq}\nTransport: RTP/UDP; client_port= {self.rtpPort}"
-		
+			self.requestSent = requestCode
+	
 		# Play request
 		elif requestCode == self.PLAY and self.state == self.READY:
 			# Update RTSP sequence number.
@@ -242,7 +243,7 @@ class Client:
 						self.openRtpPort() 
 					elif self.requestSent == self.PLAY:
 						# self.state = ...
-						self.state = self.PLAY
+						self.state = self.PLAYING
 					elif self.requestSent == self.PAUSE:
 						# self.state = ...
 						self.state = self.READY
