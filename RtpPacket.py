@@ -25,7 +25,7 @@ class RtpPacket:
   
 		header[0] = (version << 6) | (padding << 5) | (extension << 4) | cc
         
-		header[1] = (marker << 7) | pts
+		header[1] = (marker << 7) | pt
         
 		header[2] = (seqnum >> 8) & 0xFF 
 		header[3] = seqnum & 0xFF
