@@ -31,7 +31,7 @@ class ServerWorker:
 		"""Receive RTSP request from the client."""
 		connSocket = self.clientInfo['rtspSocket'][0]
 		while True:            
-			data = connSocket.recv(256)
+			data = connSocket.recv(256) # request
 			if data:
 				print("Data received:\n" + data.decode("utf-8"))
 				self.processRtspRequest(data.decode("utf-8"))
@@ -93,7 +93,7 @@ class ServerWorker:
 				self.state = self.READY
 				
 				self.clientInfo['event'].set()
-			
+				
 				self.replyRtsp(self.OK_200, seq[1])
 		
 		# Process TEARDOWN request

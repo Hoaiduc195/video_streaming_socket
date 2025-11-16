@@ -109,7 +109,7 @@ class Client:
 				# Stop listening upon requesting PAUSE or TEARDOWN
 				if self.playEvent.isSet(): 
 					break
-				
+					
 				# Upon receiving ACK for TEARDOWN request,
 				# close the RTP socket
 				if self.teardownAcked == 1:
@@ -138,7 +138,7 @@ class Client:
 		try:
 			self.rtspSocket.connect((self.serverAddr, self.serverPort))
 		except:
-			tkMessageBox.showwarning('Connection Failed', 'Connection to \'%s\' failed.' %self.serverAddr)
+			messagebox.showwarning('Connection Failed', 'Connection to \'%s\' failed.' %self.serverAddr)
 	
 	def sendRtspRequest(self, requestCode):
 		"""Send RTSP request to the server."""	
@@ -196,7 +196,7 @@ class Client:
 			# self.requestSent = ...
 			self.requestSent = requestCode
 		else:
-			return
+			return 
 		
 		# Send the RTSP request using rtspSocket.
 		# ...
