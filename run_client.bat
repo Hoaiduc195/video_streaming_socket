@@ -1,1 +1,1 @@
-py .\ClientLauncher.py 192.168.1.177 8554 6000 movie.Mjpeg
+py .\ClientLauncher.py 192.168.1.10 8554 6000 sample_1280x720.Mjpeg
