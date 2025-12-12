@@ -1,1 +1,1 @@
-py .\ClientLauncher.py 192.168.1.10 8554 6000 sample_1280x720.Mjpeg
+py .\ClientLauncher.py 10.231.6.177 8554 6000 nhacMovie_fixed.mjpeg 0

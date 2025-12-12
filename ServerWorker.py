@@ -2,6 +2,7 @@ from random import randint
 import sys, traceback, threading, socket
 import time
 import struct
+import queue
 
 from VideoStream import VideoStream
 from RtpPacket import RtpPacket
@@ -22,7 +23,12 @@ class ServerWorker:
 	CON_ERR_500 = 2
 	
 	# HD Configuration
-	MTU = 8192  # Increased from 1400 to reduce fragmentation overhead on gigabit networks
+	MTU = 2000  # Increased to 16KB for better throughput and reduced fragmentation
+	
+	# Frame rate control (change this to adjust playback speed)
+	# Set to None for natural video speed (from source file)
+	# Set to integer for fixed FPS (e.g., 30, 60, 120)
+	TARGET_FPS = 30  # None = natural speed, or set to 30, 60, 120, etc.
 	
 	clientInfo = {}
 	
@@ -37,6 +43,12 @@ class ServerWorker:
 			'fragments_sent': 0,
 			'start_time': None
 		}
+
+		# Prefetch queue and control for parallel frame reads
+		# Bounded to avoid uncontrolled memory growth
+		self.frame_queue = queue.Queue(maxsize=50)
+		self._prefetch_thread = None
+		self._stop_prefetch = threading.Event()
 		
 	def run(self):
 		threading.Thread(target=self.recvRtspRequest).start()
@@ -84,7 +96,7 @@ class ServerWorker:
 				self.clientInfo["rtpSocket"] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 				
 				# Increase buffer sizes for high-speed HD streaming
-				self.clientInfo["rtpSocket"].setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4*1024*1024)  # 4MB send buffer
+				self.clientInfo["rtpSocket"].setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 16*1024*1024)  # 16MB send buffer for 360 FPS
 				# Enable QoS (Quality of Service) for prioritized video delivery
 				try:
 					self.clientInfo["rtpSocket"].setsockopt(socket.IPPROTO_IP, socket.IP_TOS, 0x88)
@@ -96,9 +108,15 @@ class ServerWorker:
 				# Start statistics
 				self.stats['start_time'] = time.time()
 				
-				# Create a new thread and start sending RTP packets
+				# Create control event for playback and start prefetch + sender threads
 				self.clientInfo['event'] = threading.Event()
-				self.clientInfo['worker']= threading.Thread(target=self.sendRtp) 
+				# Recreate/clear prefetch queue and start prefetch thread to read frames in parallel
+				self.frame_queue = queue.Queue(maxsize=50)
+				self._stop_prefetch.clear()
+				self._prefetch_thread = threading.Thread(target=self._prefetch_frames, daemon=True)
+				self._prefetch_thread.start()
+				# Start RTP sender thread
+				self.clientInfo['worker']= threading.Thread(target=self.sendRtp)
 				self.clientInfo['worker'].start()
 		
 		# Process PAUSE request
@@ -106,37 +124,64 @@ class ServerWorker:
 			if self.state == self.PLAYING:
 				print("processing PAUSE\n")
 				self.state = self.READY
+				# Signal threads to stop reading/sending
 				self.clientInfo['event'].set()
+				self._stop_prefetch.set()
 				self.replyRtsp(self.OK_200, seq[1])
 		
 		# Process TEARDOWN request
 		elif requestType == self.TEARDOWN:
 			print("processing TEARDOWN\n")
+			# Signal threads to stop
 			self.clientInfo['event'].set()
+			self._stop_prefetch.set()
 			self.replyRtsp(self.OK_200, seq[1])
 			
 			
 			# Close the RTP socket
 			self.clientInfo['rtpSocket'].close()
+			# Join prefetch thread (short timeout) to release resources
+			try:
+				if self._prefetch_thread and self._prefetch_thread.is_alive():
+					self._prefetch_thread.join(timeout=0.2)
+			except:
+				pass
 			
 	def sendRtp(self):
 		"""Send RTP packets over UDP with HD support."""
-		FRAME_RATE = 240  # Ultra high-speed playback for maximum smoothness  
-		frame_delay = 1.0 / FRAME_RATE
+		# Calculate consumer pacing based on TARGET_FPS
+		if self.TARGET_FPS is None:
+			consumer_delay = 0.02
+		else:
+			consumer_delay = 1.0 / self.TARGET_FPS
+
 		while True:
-			self.clientInfo['event'].wait(frame_delay) 
-			
+			# Wait for control event to exist
+			if self.clientInfo.get('event') is None:
+				time.sleep(0.001)
+				continue
+
 			# Stop sending if request is PAUSE or TEARDOWN
-			if self.clientInfo['event'].isSet(): 
-				break 
-				
-			data = self.clientInfo['videoStream'].nextFrame()
-			if data: 
+			if self.clientInfo['event'].isSet():
+				break
+
+			# Prefer prefetched frames (producer-consumer)
+			data = None
+			try:
+				data = self.frame_queue.get(timeout=0.01)
+			except queue.Empty:
+				# Fallback: direct read (if prefetcher can't fill queue)
+				try:
+					data = self.clientInfo['videoStream'].nextFrame()
+				except:
+					data = None
+
+			if data:
 				frameNumber = self.clientInfo['videoStream'].frameNbr()
 				try:
 					address = self.clientInfo['rtspSocket'][1][0]
 					port = int(self.clientInfo['rtpPort'])
-					
+
 					# Check if frame needs fragmentation (HD frames)
 					if len(data) > self.MTU:
 						self.sendFragmented(data, frameNumber, address, port)
@@ -146,10 +191,14 @@ class ServerWorker:
 						self.clientInfo['rtpSocket'].sendto(packet, (address, port))
 						self.stats['frames_sent'] += 1
 						self.stats['bytes_sent'] += len(packet)
-						
-				except:
+
+				except Exception:
 					print("Connection Error")
 					self.stats['frames_lost'] += 1
+
+			# Pace consumer if fixed TARGET_FPS is set
+			if consumer_delay > 0:
+				time.sleep(consumer_delay)
 
 	def sendFragmented(self, data, frameNumber, address, port):
 		"""Fragment and send large frames exceeding MTU."""
@@ -204,6 +253,31 @@ class ServerWorker:
 		rtpPacket.encode(version, padding, extension, cc, seqnum, marker, pt, ssrc, payload)
 		
 		return rtpPacket.getPacket()
+
+	def _prefetch_frames(self):
+		"""Background thread that reads frames from VideoStream into a bounded queue."""
+		vs = self.clientInfo.get('videoStream')
+		if vs is None:
+			return
+		while not self._stop_prefetch.is_set() and not self.clientInfo.get('event', threading.Event()).isSet():
+			# If queue is full, wait briefly
+			if self.frame_queue.full():
+				time.sleep(0.002)
+				continue
+			# Read next frame (may block on file I/O)
+			try:
+				frame = vs.nextFrame()
+			except Exception:
+				frame = None
+			if not frame:
+				# End of stream or read error - small pause and retry
+				time.sleep(0.01)
+				continue
+			# Put frame into queue (skip if full)
+			try:
+				self.frame_queue.put(frame, timeout=0.01)
+			except queue.Full:
+				pass
 		
 	def replyRtsp(self, code, seq):
 		"""Send RTSP reply to the client."""
