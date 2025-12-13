@@ -1,1 +1,1 @@
-py .\ClientLauncher.py 10.231.6.177 8554 6000 nhacMovie_fixed.mjpeg 0
+py .\ClientLauncher.py localhost 8554 6000 Assets/sample1.mjpeg 0
