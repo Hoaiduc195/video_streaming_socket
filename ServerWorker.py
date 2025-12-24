@@ -48,7 +48,7 @@ class ServerWorker:
 		# Bounded to avoid uncontrolled memory growth
 		self.frame_queue = queue.Queue(maxsize=50)
 		self._prefetch_thread = None
-		self._stop_prefetch = threading.Event()
+		self._stop_prefetch = threading.Event()	
 		
 	def run(self):
 		threading.Thread(target=self.recvRtspRequest).start()
@@ -151,7 +151,7 @@ class ServerWorker:
 		"""Send RTP packets over UDP with HD support."""
 		# Calculate consumer pacing based on TARGET_FPS
 		if self.TARGET_FPS is None:
-			consumer_delay = 0.02
+			consumer_delay = 0.02 
 		else:
 			consumer_delay = 1.0 / self.TARGET_FPS
 
@@ -204,7 +204,7 @@ class ServerWorker:
 		"""Fragment and send large frames exceeding MTU."""
 		try:
 			frameSize = len(data)
-			numFragments = (frameSize + self.MTU - 1) // self.MTU
+			numFragments = (frameSize + self.MTU - 1) // self.MTU 
 			
 			for fragNum in range(numFragments):
 				# Calculate fragment boundaries
